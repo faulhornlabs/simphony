@@ -30,6 +30,17 @@ applications.
 * Integrate photophysics dynamics, including initialization and readout.
 * Include Lindblad-type noise models.
 
+## Requirements
+
+* Python >=3.9
+* CUDA 12 for GPU support
+
+How to check your Python and CUDA versions:
+```bash
+python3 --version
+nvidia-smi | grep CUDA
+```
+
 ## Installation
 
 Simphony runs on CPU by default, but can achieve significant speedups with GPU acceleration. To enable GPU support, you
@@ -39,6 +50,9 @@ need an NVIDIA GPU and a CUDA 12 environment. For more details, see the [JAX GPU
 
 You can install directly from GitHub using:
 ```bash
+python3 -m venv env          # Create venv
+source env/bin/activate      # Activate
+pip install --upgrade pip    # Upgrade pip
 pip install git+https://github.com/faulhornlabs/simphony.git
 ```
 
@@ -49,12 +63,6 @@ pip install "git+https://github.com/faulhornlabs/simphony.git#egg=simphony[cuda1
 
 Note:
 * Tutorial notebooks are not included when installing this way.
-* Python packages are typically installed in a virtual environment:
-    ```bash
-    python -m venv <env_name>         # Create venv
-    source <env_name>/bin/activate    # Activate
-    pip install --upgrade pip         # Upgrade pip
-    ```
 
 ### Manual installation with tutorial notebooks
 
@@ -64,8 +72,8 @@ Note:
     git clone git@github.com:faulhornlabs/simphony.git
     ```
 3. Enter the repository: `cd simphony`
-4. Make a python virtual environment (called, e.g., 'env'): `python -m venv <env_name>`
-5. Activate it: `source <env_name>/bin/activate`
+4. Make a python virtual environment: `python3 -m venv env`
+5. Activate it: `source env/bin/activate`
 6. Update pip: `pip install --upgrade pip`
 7. Install the package:
    * Standard install: `pip install .`
