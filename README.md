@@ -1,6 +1,6 @@
 # Simphony
 
-Simphony is an open-source Python package for simulating spin dynamics in central spin systems, with a focus on
+Simphony is an open-source Python package from [Qutility](https://www.qutility.io/) for simulating spin dynamics in central spin systems, with a focus on
 nitrogen-vacancy (NV) centers coupled to nuclear spins. It provides a modular and efficient framework for building
 quantum registers, designing pulse sequences, and analyzing system dynamics for quantum information and sensing
 applications.
