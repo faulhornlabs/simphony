@@ -58,7 +58,7 @@ pip install git+https://github.com/faulhornlabs/simphony.git
 
 With GPU (CUDA 12) support:
 ```bash
-pip install "git+https://github.com/faulhornlabs/simphony.git#egg=simphony[cuda12]"
+pip install "simphony[cuda12] @ git+https://github.com/faulhornlabs/simphony.git"
 ```
 
 Note:
