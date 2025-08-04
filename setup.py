@@ -31,7 +31,7 @@ setup(name='simphony',
           "matplotlib",
           "qiskit-dynamics==0.5.1",
           "qiskit<2",
-          "jax[cpu]",
+          "jax[cpu]==0.4.30",
           "jupyterlab"
       ],
       extras_require={
