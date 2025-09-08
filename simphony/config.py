@@ -98,6 +98,10 @@ class Config:
         """
         Set the visible GPU device by setting the CUDA_VISIBLE_DEVICES environment variable.
 
+        Warnings:
+
+            Set it before calling ``Config.set_platform('gpu')``.
+
         Args:
             gpu_id: A single GPU ID.
         """

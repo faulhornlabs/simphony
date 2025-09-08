@@ -27,15 +27,31 @@ from .exceptions import SimphonyError
 from .components import Spin, Interaction, StaticField, DrivingField
 from .model import Model
 
+# Constants (references in the `default_nv_model` docstring)
+ELECTRON_GYROMAGNETIC_RATIO = 28033.1  # MHz/T
+ELECTRON_ZERO_FIELD_SPLITTING = 2872.  # MHz
+
+NITROGEN14_GYROMAGNETIC_RATIO = -3.07771  # MHz/T
+NITROGEN14_QUADRUPOLE_SPLITTING = -5.01  # MHz
+NITROGEN14_HYPERFINE_PARALLEL = -2.14  # MHz
+NITROGEN14_HYPERFINE_PERPENDICULAR = -2.70  # MHz
+
+NITROGEN15_GYROMAGNETIC_RATIO = 4.31727  # MHz/T
+NITROGEN15_HYPERFINE_PARALLEL = 3.03  # MHz
+NITROGEN15_HYPERFINE_PERPENDICULAR = 3.65  # MHz
+
+CARBON13_GYROMAGNETIC_RATIO = -10.7084  # MHz/T
+
 
 def default_nv_model(nitrogen_isotope: Optional[int] = None,
                      carbon_atom_indices: Optional[List[tuple]] = None,
                      static_field_strength: float = 0.05,
                      interaction: bool = True,
                      **kwargs: dict) -> Model:
-    """Create a default central spin model based on nitrogen-vacancy center. Electron spin of the nitrogen-vacancy
-    center is added by default as ``'e'``. :math:`^{13}\\text{C}` nuclear spins can be added by the
-    ``carbon_atom_indices`` argument.
+    """Create a default central spin model based on a nitrogen-vacancy center. The electron spin of the nitrogen-vacancy
+    center is added by default as ``'e'``. :math:`^{13}\\text{C}` nuclear spins can be added via the
+    ``carbon_atom_indices`` argument. The positions of the nuclear spins are used to determine the hyperfine
+    tensors, based on the `Ivády Group's hyperfine dataset <https://ivadygroup.elte.hu/hyperfine/nv/index.html>`_.
 
     Args:
         nitrogen_isotope: Atomic number of the nitrogen isotope (optional, should be ``14`` or ``15``).
@@ -53,12 +69,56 @@ def default_nv_model(nitrogen_isotope: Optional[int] = None,
 
     .. Note::
 
-        The carbon atom indices define a carbon spin vector as
+        The Hamiltonian describes the default NV model (*note that our convention for nuclear spin gyromagnetic ratios
+        is different from the standard convention*):
+
+        .. math::
+            H =&
+            \\underbrace{\\gamma_{e} \\mathbf{B} \\cdot \\mathbf{S} + D S_z^2}_{\\text{electron}}
+            +
+            \\underbrace{\\gamma_{N} \\mathbf{B} \\cdot \\mathbf{I}_{N} + P I_{N,z}^2 + \\mathbf{S} \\cdot \\mathbf{A}_{N} \\cdot \\mathbf{I}_{N}}_{\\text{nitrogen}}
+            \\\\
+            &+\\underbrace{\\sum_{i}{\\gamma_{C} \\mathbf{B} \\cdot \\mathbf{I}_{C}^{(i)} + \\mathbf{S} \\cdot \\mathbf{A}_{C}^{(i)} \\cdot \\mathbf{I}_{C}^{(i)}}}_{\\text{carbon(s)}},
+
+        where the parameters are the follows:
+
+        +-----------------------------+-------------------------+------------------------+-------------------------------------+
+        | Spin                        | Parameter               | Symbol                 | Value                               |
+        +=============================+=========================+========================+=====================================+
+        | Electron (:math:`S=1`)      | Gyromagnetic ratio      | :math:`\gamma_e`       | :math:`28.0331\,\\text{GHz/T}` [1]   |
+        +-----------------------------+-------------------------+------------------------+-------------------------------------+
+        |                             | Zero-field splitting    | :math:`D`              | :math:`2.872\,\\text{GHz}` [1]       |
+        +-----------------------------+-------------------------+------------------------+-------------------------------------+
+        | Nitrogen-14 (:math:`I=1`)   | Gyromagnetic ratio      | :math:`\gamma_{N}`     | :math:`-3.07771\,\\text{MHz/T}` [2]  |
+        +-----------------------------+-------------------------+------------------------+-------------------------------------+
+        |                             | Quadrupole splitting    | :math:`P`              | :math:`-5.01\,\\text{MHz}` [1]       |
+        +-----------------------------+-------------------------+------------------------+-------------------------------------+
+        |                             | Hyperfine perpendicular | :math:`A_{N\perp}`     | :math:`-2.70\,\\text{MHz}` [1]       |
+        +-----------------------------+-------------------------+------------------------+-------------------------------------+
+        |                             | Hyperfine parallel      | :math:`A_{N\parallel}` | :math:`-2.14\,\\text{MHz}` [1]       |
+        +-----------------------------+-------------------------+------------------------+-------------------------------------+
+        | Nitrogen-15 (:math:`I=1/2`) | Gyromagnetic ratio      | :math:`\gamma_{N}`     | :math:`4.31727\,\\text{MHz/T}` [2]   |
+        +-----------------------------+-------------------------+------------------------+-------------------------------------+
+        |                             | Hyperfine perpendicular | :math:`A_{N\perp}`     | :math:`3.65\,\\text{MHz}` [1]        |
+        +-----------------------------+-------------------------+------------------------+-------------------------------------+
+        |                             | Hyperfine parallel      | :math:`A_{N\parallel}` | :math:`3.03\,\\text{MHz}` [1]        |
+        +-----------------------------+-------------------------+------------------------+-------------------------------------+
+        | Carbon-13 (:math:`I=1/2`)   | Gyromagnetic ratio      | :math:`\gamma_C`       | :math:`-10.7084\,\\text{MHz/T}` [2]  |
+        +-----------------------------+-------------------------+------------------------+-------------------------------------+
+
+        | References:
+        | [1] Felton et al., Phys. Rev. B 79, 075203 (2009)
+        | [2] CRC Handbook of Chemistry and Physics, sec. 11-4  (97th edition)
+
+
+    .. Hint::
+
+        The carbon atom indices specify the position of a carbon atom as:
 
         .. math::
 
-                \\text{carbon atom vector} = n_1 \\cdot \\mathbf{a}_1 + n_2 \\cdot \\mathbf{a}_2 +
-                n_3 \\cdot \\mathbf{a}_3 + n_4 \\cdot \\boldsymbol{\\tau},
+            \\text{carbon atom position} = n_1 \\cdot \\mathbf{a}_1 + n_2 \\cdot \\mathbf{a}_2 +
+            n_3 \\cdot \\mathbf{a}_3 + n_4 \\cdot \\boldsymbol{\\tau},
 
         where :math:`\\mathbf{a}_1`, :math:`\\mathbf{a}_2` and :math:`\\mathbf{a}_3` are the primitive lattice vectors,
         :math:`\\mathbf{0}` and :math:`\\boldsymbol{\\tau}` are the positions of the atoms inside the primitive cell,
@@ -79,7 +139,7 @@ def default_nv_model(nitrogen_isotope: Optional[int] = None,
         :math:`\\boldsymbol{\\tau}` position, while the missing carbon atom corresponds to the :math:`\\mathbf{0}`
         lattice point.
 
-        .. _default_model:
+        .. _default_nv_model:
 
     """
 
@@ -97,8 +157,8 @@ def default_nv_model(nitrogen_isotope: Optional[int] = None,
     spin_e = Spin(dimension=3,
         name='e',
         qubit_subspace=(0, -1),
-        gyromagnetic_ratio=28020.4,  # MHz/T
-        zero_field_splitting=2873.668  # MHz
+        gyromagnetic_ratio=ELECTRON_GYROMAGNETIC_RATIO,
+        zero_field_splitting=ELECTRON_ZERO_FIELD_SPLITTING
     )
     model.add_spin(spin_e)
 
@@ -109,26 +169,26 @@ def default_nv_model(nitrogen_isotope: Optional[int] = None,
                 dimension=3,
                 name='N',
                 qubit_subspace=(0, -1),
-                gyromagnetic_ratio=-3.077,  # MHz/T
-                zero_field_splitting=-4.949156  # MHz
+                gyromagnetic_ratio=NITROGEN14_GYROMAGNETIC_RATIO,
+                zero_field_splitting=NITROGEN14_QUADRUPOLE_SPLITTING
             )
             hyperfine_N = Interaction(spin_e, spin_N)
-            hyperfine_N.xx = 2.679  # MHz
-            hyperfine_N.yy = 2.679  # MHz
-            hyperfine_N.zz = 2.188218  # MHz
+            hyperfine_N.xx = NITROGEN14_HYPERFINE_PERPENDICULAR
+            hyperfine_N.yy = NITROGEN14_HYPERFINE_PERPENDICULAR
+            hyperfine_N.zz = NITROGEN14_HYPERFINE_PARALLEL
 
         if nitrogen_isotope == 15:
             spin_N = Spin(
                 dimension=2,
                 name='N',
                 qubit_subspace=(-1 / 2, 1 / 2),
-                gyromagnetic_ratio=-3.077,  # MHz/T
-                zero_field_splitting=0.  # MHz
+                gyromagnetic_ratio=NITROGEN15_GYROMAGNETIC_RATIO,
+                zero_field_splitting=0.
             )
             hyperfine_N = Interaction(spin_e, spin_N)
-            hyperfine_N.xx = 3.65  # MHz
-            hyperfine_N.yy = 3.65  # MHz
-            hyperfine_N.zz = 3.15  # MHz
+            hyperfine_N.xx = NITROGEN15_HYPERFINE_PERPENDICULAR
+            hyperfine_N.yy = NITROGEN15_HYPERFINE_PERPENDICULAR
+            hyperfine_N.zz = NITROGEN15_HYPERFINE_PARALLEL
 
         if nitrogen_isotope == 14 or nitrogen_isotope == 15:
             model.add_spin(spin_N)
@@ -163,7 +223,7 @@ def default_nv_model(nitrogen_isotope: Optional[int] = None,
                 dimension=2,
                 name='C{}'.format(C_idx),
                 qubit_subspace=(-1 / 2, 1 / 2),
-                gyromagnetic_ratio=10.71,  # MHz/T
+                gyromagnetic_ratio=CARBON13_GYROMAGNETIC_RATIO,
                 zero_field_splitting=0.
             )
             model.add_spin(spin_C)

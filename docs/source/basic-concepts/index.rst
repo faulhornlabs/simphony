@@ -11,7 +11,7 @@ is essential to ensure that the relative positions of the nuclear spins (as refl
 tensor) and the orientations of the driving fields are properly aligned.
 
 Simphony provides a default NV model to which one can add carbon-13 nuclear spins using lattice indices. To identify the
-choice of the coordinate system, see the documentation of the :ref:`default NV model <default_model>`.
+choice of the coordinate system, see the documentation of the :ref:`default NV model <default_nv_model>`.
 
 Spin-Hamiltonian
 ----------------
@@ -37,6 +37,11 @@ The first term represents the Zeeman interaction with static and driving fields.
 zero-field splitting (for spin-1) and nuclear quadrupole effects. The last term describes interactions between spins,
 such as hyperfine coupling between an electron spin and nearby nuclear spins.
 
+Note that the Hamiltonian above does not treat either spin as central; in practice, however, it is recommended to
+consider the first spin as the central spin. Furthermore, in this Hamiltonian, *all Zeeman terms have a positive sign*,
+unlike the usual convention where the terms corresponding to nuclear spins have a negative sign. As a result, this
+introduces a **sign difference** in the gyromagnetic ratios for the nuclear spins.
+
 The goal of Simphony is to make it easy to create such spin models, either by using the default one or by building a
 custom model, and to set the time dependence of the driving magnetic field(s) through a sequence of pulses to coherently
 control the coupled spin system.
@@ -53,7 +58,7 @@ Units
 
 Frequencies are expressed in MHz, while time is measured in :math:`\mu\text{s}`. Energies are given in terms of
 frequency, which corresponds to the unit system :math:`h = 1` in the Hamiltonian. The strength of magnetic fields is
-measured in Tesla (T).
+measured in Tesla (T). Gyromagnetic ratios are measured in MHz/T.
 
 Bases and frames
 ----------------
