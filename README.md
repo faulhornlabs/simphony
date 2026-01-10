@@ -77,7 +77,7 @@ Note:
 6. Update pip: `pip install --upgrade pip`
 7. Install the package:
    * Standard install: `pip install .`
-   * Local editable install: `pip install . -e`
+   * Local editable install: `pip install -e .`
    * With GPU support: `pip install .[cuda12]`
 
 ## Usage
