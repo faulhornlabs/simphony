@@ -604,12 +604,14 @@ class DrivingField(Components1D):
             samples *= unp.exp(1j * np.pi)
 
         for sample, start, end in zip(samples, ts[:-1], ts[1:]):
-            pulse = Pulse(start=start,
-                          end=end,
-                          frequency=frequency,
-                          complex_envelope=sample,
-                          driving_field=self)
-            self.pulses.append(pulse)
+            if unp.abs(sample) > 1e-12:
+                pulse = Pulse(start=start,
+                              end=end,
+                              frequency=frequency,
+                              complex_envelope=sample,
+                              driving_field=self)
+                self.pulses.append(pulse)
+                
 
         self.last_pulse_end = unp.max(unp.array([self.last_pulse_end, ts[-1]]))
 
