@@ -77,6 +77,7 @@ def jax_expm_solver(
     )
 
 qiskit_dynamics.solvers.fixed_step_solvers.jax_expm_solver = jax_expm_solver
+qiskit_dynamics.solvers.solver_functions.jax_expm_solver = jax_expm_solver
 
 ########################################################################################################################
 
@@ -112,6 +113,7 @@ def jax_expm_parallel_solver(
     )
 
 qiskit_dynamics.solvers.fixed_step_solvers.jax_expm_parallel_solver = jax_expm_parallel_solver
+qiskit_dynamics.solvers.solver_functions.jax_expm_parallel_solver = jax_expm_parallel_solver
 
 ########################################################################################################################
 
