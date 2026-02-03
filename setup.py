@@ -17,7 +17,7 @@
 from setuptools import setup
 
 setup(name='simphony',
-      version='0.1',
+      version='0.1.2',
       description='NV center simulator package',
       author='Qutility @ Faulhorn Labs',
       url='https://github.com/faulhornlabs/simphony-internal',

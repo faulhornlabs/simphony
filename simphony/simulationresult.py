@@ -370,7 +370,7 @@ class SimulationResult:
         self._initial_state = initial_state
 
         if initial_state is not None and self.time_evol_operator is not None:
-            states = np.einsum('stij,j->sti', self.time_evol_operator._array, initial_state)
+            states = unp.einsum('stij,j->sti', self.time_evol_operator._array, initial_state)
 
             self.time_evol_state = TimeEvolState(array=states,
                                                  ts=self.ts,
