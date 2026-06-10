@@ -1,3 +1,209 @@
 img {
     height: auto !important;
 }
+
+:root {
+    --simphony-green: #51877f;
+    --simphony-green-dark: #556168;
+    --simphony-gold: #cdc82f;
+    --simphony-blue: #dbeff6;
+}
+
+.wy-side-nav-search {
+    background-color: var(--simphony-gold);
+}
+
+.wy-side-nav-search > a,
+.wy-side-nav-search .version {
+    color: var(--simphony-green-dark);
+}
+
+.wy-side-nav-search img {
+    display: block;
+    margin: 0 auto;
+}
+
+.wy-side-tagline {
+    margin: 0 auto;
+    max-width: 240px;
+    color: #000000;
+    font-family: "Noto Sans", sans-serif;
+    font-size: 0.9em;
+    font-weight: 300;
+    line-height: 1.25;
+    text-align: center;
+    white-space: normal;
+}
+
+.wy-side-nav-search div[role="search"] {
+    margin-top: 1.5em;
+}
+
+.wy-nav-side {
+    background-color: var(--simphony-green);
+}
+
+.wy-side-scroll {
+    display: flex;
+    flex-direction: column;
+}
+
+.wy-menu-vertical {
+    flex: 1 1 auto;
+}
+
+.wy-side-version {
+    flex: 0 0 auto;
+    margin-top: auto;
+    padding: 0.5em 1em 0;
+    color: #f7fbfd;
+    font-size: 0.85em;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    background-color: var(--simphony-green);
+    border-top: 1px solid rgba(255, 255, 255, 0.14);
+    text-align: center;
+}
+
+.wy-nav-content-wrap {
+    background-color: var(--simphony-blue);
+}
+
+.wy-menu-vertical a {
+    color: #f7fbfd;
+}
+
+.wy-menu-vertical a:hover {
+    background-color: rgba(85, 97, 104, 0.55);
+}
+
+.wy-menu-vertical li.current > a {
+    background-color: var(--simphony-green-dark);
+    border-right-color: var(--simphony-gold);
+}
+
+.wy-menu-vertical li.current > a,
+.wy-menu-vertical li.current > a span,
+.wy-menu-vertical li.current > a code {
+    color: #ffffff !important;
+}
+
+.wy-menu-vertical li.current > a:hover {
+    color: #ffffff !important;
+}
+
+.wy-menu-vertical li.current ul {
+    background-color: var(--simphony-blue);
+}
+
+.wy-menu-vertical li.current ul li a {
+    color: var(--simphony-green-dark);
+}
+
+.wy-menu-vertical li.current ul li a:hover {
+    background-color: rgba(81, 135, 127, 0.12);
+    color: #000000 !important;
+}
+
+.wy-menu-vertical li.current ul li.current > a,
+.wy-menu-vertical li.current ul li.current > a span,
+.wy-menu-vertical li.current ul li.current > a code {
+    color: #000000 !important;
+    font-weight: 700;
+}
+
+.wy-menu-vertical li.current ul li.current > a:hover {
+    color: #000000 !important;
+}
+
+.wy-menu-vertical li.current ul li.toctree-l2 > a,
+.wy-menu-vertical li.current ul li.toctree-l3 > a,
+.wy-menu-vertical li.current ul li.toctree-l4 > a {
+    background-color: transparent;
+}
+
+.rst-content a {
+    color: var(--simphony-green);
+}
+
+.rst-content a:hover {
+    color: var(--simphony-green-dark);
+}
+
+.rst-content a code,
+.rst-content a tt {
+    color: var(--simphony-green);
+}
+
+.rst-content .viewcode-link,
+.rst-content .viewcode-back {
+    color: var(--simphony-green-dark);
+}
+
+.rst-content .viewcode-link:hover,
+.rst-content .viewcode-back:hover {
+    color: var(--simphony-gold);
+}
+
+.rst-content dl.py.class > dt,
+.rst-content dl.py.function > dt,
+.rst-content dl.py.method > dt,
+.rst-content dl.py.property > dt,
+.rst-content dl.py.attribute > dt,
+.rst-content dl.py.data > dt,
+.rst-content dl.py.module > dt {
+    background: var(--simphony-blue);
+    color: var(--simphony-green-dark);
+    border-top-color: var(--simphony-green);
+}
+
+.rst-content dl.py.class > dt .headerlink,
+.rst-content dl.py.function > dt .headerlink,
+.rst-content dl.py.method > dt .headerlink,
+.rst-content dl.py.property > dt .headerlink,
+.rst-content dl.py.attribute > dt .headerlink,
+.rst-content dl.py.data > dt .headerlink,
+.rst-content dl.py.module > dt .headerlink {
+    color: var(--simphony-green-dark);
+}
+
+.rst-content dl.py.class > dt .sig-name,
+.rst-content dl.py.function > dt .sig-name,
+.rst-content dl.py.method > dt .sig-name,
+.rst-content dl.py.property > dt .sig-name,
+.rst-content dl.py.attribute > dt .sig-name,
+.rst-content dl.py.data > dt .sig-name,
+.rst-content dl.py.module > dt .sig-name {
+    color: var(--simphony-green-dark);
+}
+
+.rst-content .admonition.note,
+.rst-content .admonition.tip,
+.rst-content .admonition.hint,
+.rst-content .admonition.important,
+.rst-content .admonition.seealso {
+    background: #f3f3f3;
+    border-color: var(--simphony-green);
+}
+
+.rst-content .admonition.warning,
+.rst-content .admonition.caution,
+.rst-content .admonition.attention,
+.rst-content .admonition.danger,
+.rst-content .admonition.error {
+    background: #f3f3f3;
+    border-color: var(--simphony-green-dark);
+}
+
+.rst-content .admonition-title {
+    color: var(--simphony-green-dark);
+}
+
+.rst-content .highlighted {
+    background: var(--simphony-gold);
+    box-shadow: 0 0 0 2px var(--simphony-gold);
+}
+
+.sidebar-only {
+    display: none;
+}

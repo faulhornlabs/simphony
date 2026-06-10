@@ -2,127 +2,164 @@
 Basic concepts
 ==============
 
-Coordinate system
------------------
+Introduction
+------------
 
-In the case of the nitrogen-vacancy (NV) center, the z-axis is aligned parallel to the N-V axis, and typically, the static
-magnetic field is also aligned with this axis. While there is freedom in choosing the orientation of the x-y plane, it
-is essential to ensure that the relative positions of the nuclear spins (as reflected in the corresponding hyperfine
-tensor) and the orientations of the driving fields are properly aligned.
+At the highest level, a Simphony :ref:`model <simphony_model_Model>` is a coupled-spin system assembled from a small
+number of component types. :ref:`Spins <simphony_components_BaseSpin>` define the individual quantum objects and their
+qubits. :ref:`Static fields <simphony_components_StaticField>` describe static external fields, while
+:ref:`driving fields <simphony_components_BaseDrivingField>` describe time-dependent control fields.
+:ref:`Interactions <simphony_components_Interaction>` couple different spins to one another. From these ingredients,
+Simphony constructs the model, derives quantities such as the eigensystem and driving operators, and simulates time
+evolution under pulse sequences.
 
-Simphony provides a default NV model to which one can add carbon-13 nuclear spins using lattice indices. To identify the
-choice of the coordinate system, see the documentation of the :ref:`default NV model <default_nv_model>`.
+Coordinate system and axis conventions
+--------------------------------------
+
+Simphony represents the full model in a global laboratory frame. Quantities attached to a
+:ref:`spin <simphony_components_BaseSpin>`, :ref:`static field <simphony_components_StaticField>`, or
+:ref:`driving field <simphony_components_BaseDrivingField>`, as well as :ref:`interactions
+<simphony_components_Interaction>`, are interpreted in that same frame.
+Each spin may additionally define an :ref:`anisotropy axis <simphony_components_BaseSpin_anisotropy_axis>` and a
+:ref:`quantization axis <simphony_components_BaseSpin_quantization_axis>`. The anisotropy axis fixes the principal
+direction of local terms such as zero-field splitting or quadrupole splitting, while the quantization axis sets which
+direction is treated as the spin's local z-axis when Simphony builds operators and states for that spin.
+
+For nitrogen-vacancy (NV) models, the z-axis is typically chosen along the N-V axis, and the static magnetic field is
+often aligned with it as well. In the packaged single-NV and multi-NV builders, the electron and nuclear anisotropy
+axes and the hyperfine tensors are provided in conventions consistent with the chosen NV orientations, and multi-NV
+orientations are rotated into the common lab frame before the full model is assembled. For the exact packaged
+conventions, see :ref:`default NV model <simphony_defaults_default_nv_model>` and
+:ref:`default multi-NV model <simphony_defaults_default_multi_nv_model>`.
 
 Spin-Hamiltonian
 ----------------
 
-The central spin system can be described by the following Hamiltonian:
+The coupled-spin system is described by a Hamiltonian of the form
 
 .. math::
 
-    H = \sum_{i}{\gamma_i \boldsymbol{S_i}\left[\boldsymbol{B}_\text{static}+\boldsymbol{B}_\text{drive}(t)\right]}
-      + \sum_{i}{\Delta_i S_{z,i}^2}
-      + \sum_{i,j}{\boldsymbol{S_i A_{ij} S_j}},
+    \begin{aligned}
+    H(t) &= \sum_i \boldsymbol{S}_i^\mathsf{T} \boldsymbol{D}_i \boldsymbol{S}_i
+         + \sum_{i < j} \boldsymbol{S}_i^\mathsf{T} \boldsymbol{A}_{ij} \boldsymbol{S}_j \\
+         &\quad + \sum_{i \in \text{electron spins}}
+    \gamma_i \boldsymbol{S}_i \!\left[\boldsymbol{B}_\text{static} + \boldsymbol{B}_\text{drive}(t)\right]
+         - \sum_{i \in \text{nuclear spins}}
+    \gamma_i \boldsymbol{S}_i \!\left[\boldsymbol{B}_\text{static} + \boldsymbol{B}_\text{drive}(t)\right]
+    \end{aligned}
 
 where
 
-    * :math:`\boldsymbol{S_i} = (S_{x,i}, S_{y,i}, S_{z,i})` are the spin operators,
+    * :math:`\boldsymbol{S}_i = (S_{x,i}, S_{y,i}, S_{z,i})` are the spin operators,
+    * :math:`\boldsymbol{D}_i` is the zero-field splitting (electron spin) or quadrupole tensor (nuclear spin),
+    * :math:`\boldsymbol{A}_{ij}` describes the interaction tensor between spins :math:`i` and :math:`j`.
     * :math:`\gamma_i` are the gyromagnetic ratios,
     * :math:`\boldsymbol{B}_\text{static}` is the static magnetic field,
     * :math:`\boldsymbol{B}_\text{drive}(t)` is the time-dependent driving magnetic field,
-    * :math:`\Delta_i` are the zero-field splitting or nuclear quadrupole parameters,
-    * :math:`\boldsymbol{A_{ij}}` describes the interaction (e.g., hyperfine or dipolar) between the i-th and j-th spin.
 
-The first term represents the Zeeman interaction with static and driving fields. The second term accounts for
-zero-field splitting (for spin-1) and nuclear quadrupole effects. The last term describes interactions between spins,
-such as hyperfine coupling between an electron spin and nearby nuclear spins.
-
-Note that the Hamiltonian above does not treat either spin as central; in practice, however, it is recommended to
-consider the first spin as the central spin. Furthermore, in this Hamiltonian, *all Zeeman terms have a positive sign*,
-unlike the usual convention where the terms corresponding to nuclear spins have a negative sign. As a result, this
-introduces a **sign difference** in the gyromagnetic ratios for the nuclear spins.
-
-The goal of Simphony is to make it easy to create such spin models, either by using the default one or by building a
-custom model, and to set the time dependence of the driving magnetic field(s) through a sequence of pulses to coherently
-control the coupled spin system.
+The first term contains single-spin anisotropy terms such as zero-field splitting and nuclear quadrupole
+contributions. The second term contains pairwise couplings such as hyperfine and dipolar interactions. The third and
+fourth terms describe Zeeman coupling to the static and driving fields for electron and nuclear spins, respectively;
+the nuclear-spin contribution carries the opposite sign convention used by Simphony.
 
 Quantum numbers and qubit subspace
 ----------------------------------
 
-The spins in the central spin register are typically spin-1/2 or spin-1. For quantum computing applications, it is
-necessary to define a qubit subspace within the Hilbert space of a spin-1 system. Similarly, for spin-1/2 systems, the
-ordering of basis states must be specified to correctly define the computational basis for the qubits.
+Each spin carries an ordered set of :ref:`quantum numbers <simphony_components_BaseSpin_quantum_nums>`. Simphony uses
+these quantum numbers to build the full product basis of the model, to label product states and eigenstates, and to
+accept state specifications such as tuples or dictionaries of per-spin quantum numbers.
+
+Simphony uses :ref:`qubit subspace <simphony_components_BaseSpin_qubit_subspace>` where needed to select or order the
+two quantum numbers that define the computational qubit. For :math:`S = 1/2` systems, it fixes the ordering of the two
+basis states. For :math:`S \geq 1` systems, it selects two levels that act as the logical :math:`|0\rangle` and
+:math:`|1\rangle` states.
 
 Units
 -----
 
-Frequencies are expressed in MHz, while time is measured in :math:`\mu\text{s}`. Energies are given in terms of
-frequency, which corresponds to the unit system :math:`h = 1` in the Hamiltonian. The strength of magnetic fields is
-measured in Tesla (T). Gyromagnetic ratios are measured in MHz/T.
+Hamiltonian matrix elements and energy splittings are expressed in MHz, while time is measured in
+:math:`\mu\text{s}`. This corresponds to the unit system :math:`h = 1` (not :math:`\hbar = 1`) in the Hamiltonian.
+Magnetic-field amplitudes are expressed in Tesla (T), and gyromagnetic ratios in MHz/T.
 
 Bases and frames
 ----------------
 
-By applying pulses to the spin system, nontrivial time evolution occurs. The goal is to generate gates by using
-appropriate pulse sequences. A common question is in which basis and reference frame the time evolution realizes the
-desired ideal gate.
+The same simulated dynamics can be described in different bases and reference frames. In Simphony, this matters mainly
+for state labeling, operator representation, and gate analysis.
 
 Bases:
-    * ``product``: Basis states of each spin and their tensor product states.
-    * ``eigen``: Eigenstates of the full spin Hamiltonian, which include the effects of non-secular terms such as hyperfine interactions.
+    * ``product``: Tensor-product basis built from the basis states of the individual spins.
+    * ``eigen``: Eigenbasis of the full static Hamiltonian, including mixing from non-secular terms.
 
 Frames:
-    * ``lab``: The laboratory frame governed by the Schrödinger equation.
-    * ``rotating``: A frame rotating with respect to the lab frame, often chosen to simplify systems with time-dependent Hamiltonians.
+    * ``lab``: The laboratory frame defined by the original time-dependent Schrödinger equation.
+    * ``rotating``: A frame rotating with respect to the lab frame, often used to simplify the interpretation of driven dynamics.
 
-In Simphony, the ``product`` basis and the ``rotating`` frame are used as defaults.
+By default, Simphony labels states in the ``product`` basis, while rotating-frame operators can be used when analyzing
+or interpreting the simulated evolution.
+
+Eigenstate labeling
+-------------------
+
+Simphony labels each eigenstate by the local-:math:`S_z` product-basis state
+with which it has the largest overlap. In practice, this means that a tuple of
+quantum numbers is used as a convenient label for the eigenstate whose dominant
+component comes from that basis state.
+
+This labeling convention is usually intuitive when one local-:math:`S_z`
+product-basis state clearly dominates an eigenstate. In strongly mixed,
+degenerate, or nearly degenerate cases, however, the interpretation of the
+assigned label can be less clear. For those cases, Simphony provides
+:ref:`analysis tools <simphony_model_Model_test_labeling>` for inspecting the
+local-:math:`S_z` product-basis overlap structure of the eigensystem in more
+detail.
 
 
 Pulse segments
 --------------
 
-Simphony is designed to simulate pulse sequences that consist of microwave and radio-frequency pulses, usually acting
-alternately. During simulation, Simphony determines the simulation segments, where each segment is separated by pulse
-boundaries—that is, whenever a pulse starts or ends, a new simulation segment begins—and identifies which pulses are
-active within each segment. The simulation then proceeds through these time segments, discretizing them and computing
-the evolution by exponentiating the corresponding Hamiltonian for each piece.
-
-In certain cases, the computation can be significantly accelerated. For example, if there is no active pulse, or if there
-is a single pulse with a fixed frequency and constant envelope. In the latter case, Simphony applies an optimized method
-that performs the time evolution only for a single sinusoidal wave and then computes the full time evolution for the
-entire pulse from this result.
+Simphony simulates pulse sequences by dividing the total time evolution into segments separated by pulse boundaries.
+Within each segment, it determines which driving fields are active, discretizes the segment as needed, and propagates
+the system accordingly. Certain common cases can be accelerated substantially, for example segments with no active pulse
+or segments containing a single pulse with fixed frequency and constant envelope, where Simphony can use its
+:ref:`single-sine-wave method <simphony_solvers_solve_time_segment_single_sine_wave>`.
 
 
 Rotating frame
 --------------
 
-The rotating frame is often introduced to simplify the interpretation of gates implemented by pulse sequences. Currently,
-Simphony performs all computations in the lab frame, but the results can be analyzed in a rotating frame, which is
-commonly used when defining and interpreting quantum gates.
+The rotating frame is useful for interpreting driven spin dynamics and comparing the simulated evolution to ideal gate
+operations. In Simphony, time evolution is constructed from the lab-frame Hamiltonian, while the
+:ref:`rotating-frame operator <simphony_model_Model_rotating_frame_operator>` can be used to transform and analyze the
+resulting dynamics.
 
 In Simphony, the operator corresponding to the rotating frame is:
 
 .. math::
 
-    U_\text{rotating}(t) = \prod_{i \in \text{spins}} e^{i 2 \pi f_i t \sigma_{z,i} / 2},
+    U_\text{rotating}(t) = \bigotimes_{i \in \text{spins}} e^{i 2 \pi f_i t \sigma_{z,i} / 2},
 
-where :math:`f_i` is the rotation frequency associated with spin :math:`i`, and :math:`\sigma_{z,i}` denotes the Pauli-Z
-operator acting on the corresponding qubit subspace of spin :math:`i`.
+where :math:`f_i` is the rotation frequency associated with spin :math:`i`, and :math:`\sigma_{z,i}` is the Pauli-Z
+operator on that spin's qubit subspace.
 
 
 Virtual rotations
 -----------------
 
-Virtual rotations are phase shifts applied in software rather than by applying a physical pulse. These rotations do
-not require additional time and are commonly used to adjust the effective phase of subsequent pulses in a pulse sequence.
+Virtual rotations are phase shifts applied in software rather than by applying a physical pulse. They do not consume
+additional time and are commonly used to change the effective phase reference of subsequent pulses in a pulse sequence.
 
-In Simphony, virtual rotations are represented as ideal Z-rotations applied instantly in the qubit subspace of the
-corresponding spin.
+In Simphony, they are represented through per-spin :ref:`virtual phases <simphony_components_BaseSpin_virtual_phase>`
+and the corresponding :ref:`virtual-phase operator <simphony_model_Model_virtual_phases_operator>`, acting as ideal
+Z-rotations applied instantly in the qubit subspace.
 
 
 Tensor product convention
 -------------------------
 
-In multi-spin systems, the ordering of operators in the tensor product follows a fixed convention. In Simphony, the
-rightmost operator acts on the first spin in the register, consistent with the standard Kronecker product ordering used
-in quantum computing frameworks.
+In Simphony, tensor-product operators follow the standard Kronecker-product convention used in many quantum computing
+frameworks, as in :ref:`tensorprod <simphony_utils_tensorprod>`: the rightmost operator acts on the first spin in the
+register.
+
+For example, in a two-spin model, :math:`A \otimes B` means that :math:`B` acts on the first spin and :math:`A` acts on
+the second spin.

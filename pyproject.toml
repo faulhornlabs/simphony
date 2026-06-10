@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "simphony"
+version = "0.2"
+description = "Spin-dynamics simulation package focused on NV-center systems"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+authors = [
+  { name = "Qutility @ Faulhorn Labs", email = "info@qutility.io" },
+]
+
+dependencies = [
+  "adjustText",
+  "jax",
+  "matplotlib",
+  "numpy",
+  "qiskit<2",
+  "scipy",
+]
+
+[project.optional-dependencies]
+cuda12 = [
+  "jax[cuda12]",
+]
+docs = [
+  "myst-nb",
+  "sphinx",
+  "sphinx-autodoc-typehints",
+  "sphinx-rtd-theme",
+]
+notebooks = [
+  "jupyterlab",
+  "notebook",
+]
+
+[project.urls]
+Homepage = "https://github.com/faulhornlabs/simphony"
+Repository = "https://github.com/faulhornlabs/simphony"
+Documentation = "https://qutility.io/simphony/index.html"
+
+[tool.setuptools]
+license-files = ["LICENSE"]
+
+[tool.setuptools.packages.find]
+include = ["simphony", "simphony.*"]
+
+[tool.setuptools.package-data]
+simphony = ["data/hyperfine/nv.csv"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+markers = [
+  "cpu: CPU regression tests",
+  "gpu: optional GPU regression tests",
+]

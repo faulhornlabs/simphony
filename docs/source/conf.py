@@ -5,14 +5,27 @@
 
 import os
 import sys
+from pathlib import Path
+import tomllib
+
 sys.path.insert(0, os.path.abspath('../../simphony'))
+
+project_root = Path(__file__).resolve().parents[2]
+with (project_root / 'pyproject.toml').open('rb') as f:
+    project_version = tomllib.load(f)['project']['version']
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'Simphony'
-copyright = '2025, Qutility @ Faulhorn Labs'
+project_tagline = 'a Python package to simulate point defect dynamics'
+version = project_version
+release = project_version
+copyright = '2026, Qutility @ Faulhorn Labs'
 author = 'Qutility @ Faulhorn Labs'
+html_context = {
+    'project_tagline': project_tagline,
+}
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -33,7 +46,10 @@ autosummary_generate = True
 latex_elements = {'preamble': r'\usepackage{mathtools}'}
 
 templates_path = ['_templates']
-exclude_patterns = []
+exclude_patterns = [
+    'tutorials/jupyternbs/OLD*.ipynb',
+    'tutorials/jupyternbs/TEST*.ipynb',
+]
 
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3', None),
@@ -42,7 +58,6 @@ intersphinx_mapping = {
     'scipy': ('https://docs.scipy.org/doc/scipy/', None),
     'matplotlib': ('https://matplotlib.org/stable/', None),
     'qiskit': ('https://docs.quantum.ibm.com/api/qiskit/', None),
-    'qiskit-dynamics': ('https://qiskit-community.github.io/qiskit-dynamics/', None),
 }
 
 napoleon_google_docstring = True
@@ -57,6 +72,10 @@ autodoc_inherit_docstrings = False
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = 'sphinx_rtd_theme'
+html_theme_options = {
+    'logo_only': True,
+}
+html_logo = '_static/Simphony-logo.png'
 html_static_path = ['_static']
 html_css_files = [
     'custom.css',
