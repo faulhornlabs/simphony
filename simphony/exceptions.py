@@ -24,6 +24,7 @@ class SimphonyError(Exception):
         """Set the error message."""
         super().__init__(" ".join(message))
         self.message = " ".join(message)
+        """The error message."""
 
     def __str__(self):
         """Return the message."""
@@ -36,6 +37,7 @@ class SimphonyWarning(Warning):
     def __init__(self, *message):
         """Set the warning message."""
         self.message = " ".join(message)
+        """The warning message."""
 
     def __str__(self):
         """Return the warning message."""

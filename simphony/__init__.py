@@ -16,8 +16,6 @@
 
 """Package simulating dynamics of coupled spin systems."""
 
-import sys as _sys
-
 # Prevent 'jax' from allocating 75% of the memory of the gpu by default, and enable to allocate 95% of the memory
 from os import environ as _environ
 _environ.setdefault('XLA_PYTHON_CLIENT_PREALLOCATE', 'false')
@@ -49,8 +47,3 @@ from .exceptions import SimphonyError, SimphonyWarning
 # qiskit_dynamics is no longer required; internal solvers are used.
 
 # Defaults are initialized when importing ``simphony.config``.
-
-if 'quasar' in _sys.modules:
-    raise SimphonyError(
-        'simphony must be imported before quasar when both packages are used in the same Python process.'
-    )

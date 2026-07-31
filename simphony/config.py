@@ -79,7 +79,7 @@ class Config:
 
     @staticmethod
     def set_platform(platform: str,
-                     device_id: Optional[int] = None):
+                     device_id: Optional[int] = 0):
         """
         Set the simulation platform of :mod:`jax` to ``'cpu'`` or ``'gpu'``.
 
@@ -101,7 +101,10 @@ class Config:
         Args:
             platform: Simulation platform of :mod:`jax`. Accepted case-insensitive values are
                 ``'cpu'`` and ``'gpu'``.
-            device_id: Optional GPU device id to expose via ``CUDA_VISIBLE_DEVICES``.
+            device_id: GPU device id to expose via ``CUDA_VISIBLE_DEVICES``. Defaults to ``0`` so a
+                process only ever touches a single GPU by default -- important resource hygiene on
+                shared multi-GPU machines. Pass ``None`` to leave all GPUs visible instead (e.g. to
+                place work on multiple devices from within the same process).
         """
 
         if not isinstance(platform, str):

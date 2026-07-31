@@ -89,9 +89,9 @@ Optional extras:
   ```bash
   pip install ".[cuda12]"
   ```
-- `notebooks`: Dependencies for running the tutorial notebooks locally.
+- `notebook-tools`: Dependencies for running the tutorial notebooks locally.
   ```bash
-  pip install ".[notebooks]"
+  pip install ".[notebook-tools]"
   ```
 - `docs`: Dependencies for building the documentation locally.
   ```bash
@@ -100,7 +100,7 @@ Optional extras:
 
 Combine them as needed:
 ```bash
-pip install ".[notebooks,cuda12]"
+pip install ".[notebook-tools,cuda12]"
 ```
 
 ## Usage
@@ -110,7 +110,7 @@ functionality of the package. Tutorial notebooks can be found within the
 `jupyternbs` directory.
 1. Start the JupyterLab by running: `jupyter-lab`
 2. Select a notebook from the left panel within the pop-up browser window. For a
-   first example, open `jupyternbs/tutorial_basic.ipynb`.
+   first example, open `jupyternbs/1_tutorial_basic.ipynb`.
 
 ## Documentation
 

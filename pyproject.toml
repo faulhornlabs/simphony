@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "simphony"
-version = "0.2"
+version = "0.2.1"
 description = "Spin-dynamics simulation package focused on NV-center systems"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -15,10 +15,10 @@ authors = [
 
 dependencies = [
   "adjustText",
-  "jax",
+  "jax>=0.10,<0.11",
   "matplotlib",
   "numpy",
-  "qiskit<2",
+  "qiskit>=2.5,<3",
   "scipy",
 ]
 
@@ -32,7 +32,7 @@ docs = [
   "sphinx-autodoc-typehints",
   "sphinx-rtd-theme",
 ]
-notebooks = [
+notebook-tools = [
   "jupyterlab",
   "notebook",
 ]

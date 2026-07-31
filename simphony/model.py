@@ -38,6 +38,7 @@ import math
 
 import numpy as np
 import jax.numpy as jnp
+from jax import vmap
 from scipy.optimize import linear_sum_assignment
 
 import matplotlib.pyplot as plt
@@ -540,8 +541,10 @@ class Model:
 
     @property
     def driving_operators(self) -> Dict[str, List[uarray]]:
-        r"""Driving operators are the time-independent operator parts of the driving
-        Hamiltonian, whereas pulses are the time-dependent scalar parts:
+        r"""Time-independent operator parts of the driving Hamiltonian.
+
+        The driving operators are the operator parts, whereas pulses are the time-dependent scalar
+        parts:
 
         .. math::
 
@@ -580,8 +583,10 @@ class Model:
 
     @property
     def local_quasistatic_noise_operators(self) -> List[uarray]:
-        r"""These operators represent the time-independent part of the noise Hamiltonian,
-        while their strengths represent the shot-dependent scalar parts:
+        r"""Time-independent operators of the local quasistatic-noise Hamiltonian.
+
+        These operators represent the time-independent part of the noise Hamiltonian, while their
+        strengths represent the shot-dependent scalar parts:
 
         .. math::
 
@@ -1180,31 +1185,45 @@ class Model:
         h_rot = self._get_rotating_frame_hamiltonian(in_qubit_subspace=in_qubit_subspace)
 
         if isinstance(self.rotating_frame_hamiltonian, str) and self.rotating_frame_hamiltonian == 'local_qubit_z':
-            if only_diag:
-                frame_operator_fn = _frame_operator_diag
-            else:
-                frame_operator_fn = _frame_operator
-
             omegas = 2 * unp_dynamic.pi * self.rotating_frame_frequencies
 
             if in_qubit_subspace:
-                def operator_(t1):
-                    return frame_operator_fn(sign * omegas * t1)
+                sigma_zs = None
             else:
                 sigma_zs = [spin.operator_qubit_subspace.z for spin in self.spins]
 
-                def operator_(t1):
-                    return frame_operator_fn(sign * omegas * t1, sigma_zs)
-        else:
-            def operator_(t1):
-                operator = expm(-1j * sign * 2 * unp_dynamic.pi * t1 * h_rot)
-                if only_diag:
-                    return unp_dynamic.diag(operator)
-                return operator
+            # The local_qubit_z frame operator is diagonal and each basis state's phase is linear
+            # in t (phase_j(t) = sign * t/2 * constants[j]), so every time point can be evaluated
+            # with a single vectorized call instead of looping in Python over t (and over spins) --
+            # the latter dispatches thousands of tiny ops when unp_dynamic is jax.numpy on GPU.
+            constants = _rotating_frame_basis_constants(omegas, sigma_zs)
+
+            t_array = unp_dynamic.asarray(t)
+            scalar_input = t_array.shape == ()
+            t_flat = t_array.reshape(-1)
+
+            diag_values = unp_dynamic.exp(1j * sign * unp_dynamic.outer(t_flat, constants) / 2)
+
+            if only_diag:
+                result = diag_values
+            else:
+                dim = constants.shape[0]
+                eye = unp_dynamic.eye(dim, dtype=diag_values.dtype)
+                result = diag_values[:, :, None] * eye[None, :, :]
+
+            return result[0] if scalar_input else result
+
+        def operator_(t1):
+            operator = expm(-1j * sign * 2 * unp_dynamic.pi * t1 * h_rot)
+            if only_diag:
+                return unp_dynamic.diag(operator)
+            return operator
 
         t_array = unp_dynamic.asarray(t)
         if t_array.shape == ():
             return operator_(t_array.item())
+        if unp_dynamic is jnp:
+            return vmap(operator_)(t_array)
         return unp_dynamic.array([operator_(t1) for t1 in t_array])
 
     def _get_rotating_frame_hamiltonian(self,
@@ -1326,7 +1345,7 @@ class Model:
 
     def productstate(self,
                      quantum_nums: Union[str, Dict[str, float], Tuple[float, ...]]) -> uarray:
-        """Return the product basis state of the model corresponding to given quantum numbers of the spins.
+        """Return the product-basis state for the given per-spin quantum numbers.
 
         Args:
             quantum_nums: Quantum numbers. It can be specified by three different ways:
@@ -1661,8 +1680,10 @@ class Model:
 
     def eigenenergy(self,
                     quantum_nums: Union[str, Dict[str, float], Tuple[float, ...]]) -> float:
-        """Return the eigenenergy of the static Hamiltonian associated with the eigenstate that has the largest
-        overlap with the local-:math:`S_z` product-basis state described by ``quantum_nums``.
+        """Return the eigenenergy of a labeled eigenstate.
+
+        The eigenstate is the one that has the largest overlap with the local-:math:`S_z`
+        product-basis state described by ``quantum_nums``.
 
         Args:
             quantum_nums: Quantum numbers. It can be specified by three different ways:
@@ -1857,7 +1878,7 @@ class Model:
     def splitting(self,
                   spin_name: str,
                   quantum_nums: Tuple[float, float],
-                  rest_quantum_nums: Dict[str, float]) -> float:
+                  rest_quantum_nums: Optional[Dict[str, float]] = None) -> float:
         """Return the energy splitting between the two eigenstates of the model. The two eigenstates differ only in a
         single quantum number, which is characterized by the ``spin_name`` and its two ``quantum_nums``. The quantum
         numbers of the remaining spins are provided in the ``rest_quantum_numbers``.
@@ -1866,7 +1887,7 @@ class Model:
             spin_name: Name of the spin.
             quantum_nums: Two different quantum numbers of ``spin_name``.
             rest_quantum_nums: Quantum number(s) of the remaining spin(s) as a dictionary, in which keys are spin names,
-                and values are quantum numbers.
+                and values are quantum numbers. May be omitted (or ``None``) if ``spin_name`` is the model's only spin.
 
         Returns:
             energy splitting (frequency in :math:`\\text{MHz}`)
@@ -1877,6 +1898,9 @@ class Model:
             raise SimphonyError("Invalid spin_name")
 
         idx = self.spin_names.index(spin_name)
+
+        if rest_quantum_nums is None:
+            rest_quantum_nums = {}
 
         if isinstance(rest_quantum_nums, dict):
 
@@ -2005,8 +2029,10 @@ class Model:
                     spin_name: str,
                     quantum_nums: Union[dict, tuple],
                     rest_quantum_nums: Union[dict, tuple]) -> float:
-        """Return the period time of a Rabi cycle for a resonant transition of the model under the influence of a
-        constant-strength driving field. The driving field is described by its ``amplitude``, while the two eigenstates
+        """Return the period time of a Rabi cycle.
+
+        For a resonant transition of the model under the influence of a constant-strength driving
+        field. The driving field is described by its ``amplitude``, while the two eigenstates
         characterizing the transition are defined by ``quantum_nums`` of the ``spin_name`` and by the ``rest_quantum_nums``,
         i.e. the quantum numbers of the remaining spins.
 
@@ -2036,8 +2062,10 @@ class Model:
                        spin_name: str,
                        quantum_nums: Union[dict, tuple],
                        rest_quantum_nums: Dict[str, float]) -> float:
-        """Return the required amplitude of a driving field for a single Rabi cycle assuming resonant transition of the
-        model under the influence of a constant-strength driving field. Rabi cycle is described by the ``period_time``,
+        """Return the driving-field amplitude for a single Rabi cycle.
+
+        Assumes a resonant transition of the model under a constant-strength driving field. The Rabi
+        cycle is described by the ``period_time``,
         while the two eigenstates characterizing the transition are defined by ``quantum_nums`` of the ``spin_name`` and
         by the ``rest_quantum_nums``, i.e. the quantum numbers of the remaining spins.
 
@@ -2096,8 +2124,10 @@ class Model:
                               amplitude: float,
                               spin_name: str,
                               rest_quantum_nums: Dict[str, float] = None) -> float:
-        """Return the period time of a Rabi cycle for a resonant transition of the model under the influence of a
-        constant-strength driving field. The driving field is described by its ``amplitude``, while the two eigenstates
+        """Return the period time of a Rabi cycle.
+
+        For a resonant transition of the model under the influence of a constant-strength driving
+        field. The driving field is described by its ``amplitude``, while the two eigenstates
         characterizing the transition are defined by the qubit states of the ``spin_name`` and by the
         ``rest_quantum_nums``, i.e. the quantum number(s) of the remaining spin(s).
 
@@ -2124,8 +2154,10 @@ class Model:
                              period_time: float,
                              spin_name: str,
                              rest_quantum_nums: Dict[str, float] = None) -> float:
-        """Return the required amplitude of a driving field for a single Rabi cycle assuming resonant transition of the
-        model under the influence of a constant-strength driving field. Rabi cycle is described by the ``period_time``,
+        """Return the driving-field amplitude for a single Rabi cycle.
+
+        Assumes a resonant transition of the model under a constant-strength driving field. The Rabi
+        cycle is described by the ``period_time``,
         while the two eigenstates characterizing the transition are defined by the qubit states of the ``spin_name`` and
         by the ``rest_quantum_nums``, i.e. the quantum numbers of the remaining spin(s).
 
@@ -2429,7 +2461,7 @@ class Model:
                                 time_segment_sequence = None,
                                 batch_size: Optional[int] = None) -> SimulationResult:
 
-        """Simulate the time evolution of the model due to the driving fields under the effect of the noise.
+        """Simulate the model's time evolution under its driving fields and noise.
 
         Args:
             n_shots: Number of the shots.
@@ -3208,6 +3240,27 @@ class Model:
             )
             ax1.tick_params(labelbottom=True)
         plt.show()
+
+
+def _rotating_frame_basis_constants(omegas,
+                                    sigma_zs=None):
+    """Time-independent per-full-basis-state frequency constants for the local_qubit_z frame.
+
+    Each spin contributes a diagonal pattern (+-1 in the qubit subspace, 0 elsewhere for
+    non-qubit-subspace spin dimensions). The rotating-frame phase for full-space basis index j is
+    linear in t (``sign * t/2 * constants[j]``), so ``constants`` -- the Kronecker sum of the
+    per-spin ``omega_i * diag_i`` vectors -- can be computed once, independent of t, and every time
+    point can then be evaluated with a single vectorized ``exp`` call.
+    """
+    if sigma_zs:
+        per_spin = [omega * unp_dynamic.diag(sigma_z) for omega, sigma_z in zip(omegas, sigma_zs)]
+    else:
+        per_spin = [omega * unp_dynamic.array([1.0, -1.0]) for omega in omegas]
+
+    constants = per_spin[0]
+    for diag_i in per_spin[1:]:
+        constants = (constants[:, None] + diag_i[None, :]).reshape(-1)
+    return constants
 
 
 def _frame_operator(phases,

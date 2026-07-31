@@ -73,6 +73,7 @@ class Operator:
         if array.ndim != 2 or array.shape[0] != array.shape[1]:
             raise SimphonyError('operator must be a square array')
         self.matrix = array
+        """The square operator matrix in the full Hilbert space."""
 
     def __repr__(self):
         return f"{type(self).__name__}(shape={self.matrix.shape})"
@@ -105,7 +106,10 @@ class _TimeEvolBase:
                  model):
         self._array = unp_analysis.asarray(array)
         self.ts = unp_analysis.asarray(ts)
+        """Timestamps of the stored data (in :math:`\\mu\\text{s}`)."""
+
         self.model = model
+        """Deep copy of the model captured at simulation time."""
 
     def __repr__(self):
         n_shots, n_ts, dimension = self._array.shape[:3]
@@ -531,7 +535,9 @@ class SimulationResult:
 
     @property
     def initial_density_matrix(self):
-        """Initial density matrix used to derive :attr:`time_evol_density_matrix` from :attr:`time_evol_operator`."""
+        """Initial density matrix.
+
+        Used to derive :attr:`time_evol_density_matrix` from :attr:`time_evol_operator`."""
         return self._initial_density_matrix
 
     @initial_density_matrix.setter
@@ -745,7 +751,7 @@ class SimulationResult:
                                ax: plt.axis = None,
                                in_qubit_subspace: bool = True,
                                source: Optional[str] = None):
-        """Plot the expectation values of the operators corresponding the time evolved states from an initial state.
+        """Plot operator expectation values over the time evolution.
 
         Args:
             operator: :class:`Operator`, square matrix, Pauli string, or list of these. Strings may include

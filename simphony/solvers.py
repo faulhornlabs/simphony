@@ -55,10 +55,19 @@ class SolverResult:
                  shot_axis: Optional[int] = None,
                  unp_inner: Any):
         self.unp_inner = unp_inner
+        """Array namespace backing the stored arrays, either :mod:`numpy` or :mod:`jax.numpy`."""
+
         self.ts = unp_inner.asarray(ts)
+        """Timestamps of the stored trajectory (in :math:`\\mu\\text{s}`)."""
+
         self.ys = unp_inner.asarray(ys)
+        """Stored trajectory of states or propagators, with time and shot axes."""
+
         self.time_axis = time_axis
+        """Index of the time axis in :attr:`ys`."""
+
         self.shot_axis = shot_axis
+        """Index of the shot axis in :attr:`ys`, or ``None`` if there is no shot axis."""
 
     @classmethod
     def stack_shots(cls, shot_results: Sequence[SolverResult]) -> SolverResult:
@@ -181,19 +190,34 @@ def compute_time_grid(t_span: uarray,
     n_list = unp_inner.ceil(unp_inner.abs(delta_t) / max_dt).astype(int)
     n_list = unp_inner.maximum(n_list, 1)
 
-    h_nested_list = []
-    for dt, n in zip(delta_t, n_list):
-        if n == 1 or not jitter:
-            h = unp_inner.full(n, dt / n)
+    if not jitter:
+        # A Python loop dispatching one small JAX op (full/diff/etc.) per interval scales with
+        # n_eval and is the same "many tiny GPU dispatches" antipattern fixed elsewhere in this
+        # module -- here every interval takes this simple, jitter-free path (since `not jitter`
+        # is constant across intervals), so it vectorizes into a single repeat + concrete-index
+        # slicing instead, with no per-interval JAX dispatch.
+        step_sizes = delta_t / n_list
+        n_list_concrete = np.asarray(n_list)
+        bounds = np.concatenate([[0], np.cumsum(n_list_concrete)])
+        if unp_inner is jnp:
+            flat_h = unp_inner.repeat(step_sizes, n_list_concrete, total_repeat_length=int(bounds[-1]))
         else:
-            if rng is None:
-                rng = np.random.default_rng()
-            base = unp_inner.linspace(0.0, 1.0, n + 1)
-            jitter_np = np.zeros(n + 1)
-            jitter_np[1:-1] = (rng.random(n - 1) * 2 - 1) * jitter / n
-            jitter_unp = base + unp_inner.asarray(jitter_np)
-            h = unp_inner.diff(jitter_unp) * dt
-        h_nested_list.append(h)
+            flat_h = unp_inner.repeat(step_sizes, n_list_concrete)
+        h_nested_list = [flat_h[bounds[i]:bounds[i + 1]] for i in range(len(n_list_concrete))]
+    else:
+        h_nested_list = []
+        for dt, n in zip(delta_t, n_list):
+            if n == 1:
+                h = unp_inner.full(n, dt / n)
+            else:
+                if rng is None:
+                    rng = np.random.default_rng()
+                base = unp_inner.linspace(0.0, 1.0, n + 1)
+                jitter_np = np.zeros(n + 1)
+                jitter_np[1:-1] = (rng.random(n - 1) * 2 - 1) * jitter / n
+                jitter_unp = base + unp_inner.asarray(jitter_np)
+                h = unp_inner.diff(jitter_unp) * dt
+            h_nested_list.append(h)
 
     return t_list, h_nested_list, n_list
 
@@ -450,16 +474,15 @@ class Solver:
         minus1j_two_pi = -1j * 2 * unp_dynamic.pi
 
         self.static_generator = minus1j_two_pi * unp_dynamic.asarray(static_hamiltonian)
+        """Static-Hamiltonian generator :math:`-2\\pi i H_0` driving the evolution."""
 
-        if driving_operators is None:
-            self.drive_generators = None
-        else:
-            self.drive_generators = minus1j_two_pi * unp_dynamic.asarray(driving_operators)
+        self.drive_generators = (None if driving_operators is None
+                                 else minus1j_two_pi * unp_dynamic.asarray(driving_operators))
+        """Per-drive generators (:math:`-2\\pi i` times each driving operator), or ``None``."""
 
-        if noise_operators is None:
-            self.noise_generators = None
-        else:
-            self.noise_generators = minus1j_two_pi * unp_dynamic.asarray(noise_operators)
+        self.noise_generators = (None if noise_operators is None
+                                 else minus1j_two_pi * unp_dynamic.asarray(noise_operators))
+        """Per-noise-term generators (:math:`-2\\pi i` times each noise operator), or ``None``."""
 
     def make_generator_without_noise(self,
                                      unp_inner,
@@ -770,6 +793,16 @@ def solve_time_segment_basic(solver: Solver,
                               rng=rng)
 
 
+SPARSE_CYCLE_THRESHOLD = 16
+"""Evaluation-point count above which the single-sine-wave solver builds the dense power table.
+
+Above this many evaluation points (cycle indices), solve_time_segment_single_sine_wave switches from
+per-point jnp.linalg.matrix_power calls to building the full power table via associative_scan
+-- see the cost-model discussion in that function. Chosen so the per-call GPU dispatch overhead of
+up to this many matrix_power calls stays negligible compared to a single associative_scan
+dispatch."""
+
+
 def solve_time_segment_single_sine_wave(solver: Solver,
                                         y0s: List[uarray],
                                         noise_coeffs: List[Sequence[float]],
@@ -843,10 +876,48 @@ def solve_time_segment_single_sine_wave(solver: Solver,
     U_single_sine = solution_projected_sorted[:, -1]
 
     cycle_indices = unp_inner.asarray(time_segment.simulation.cycle_indices)
-    U_single_sine_powers = unp_inner.stack(
-        [unp_inner.linalg.matrix_power(U_single_sine, int(i)) for i in cycle_indices],
-        axis=1,
-    )
+
+    if unp_inner is jnp:
+        # jnp.linalg.matrix_power requires a static exponent, so a per-time-point Python loop
+        # would dispatch one GPU op per evaluation time (the same pattern that made the rotating
+        # frame transform slow on GPU). Two ways to avoid that, depending on how many evaluation
+        # points (cycle indices) are actually needed -- decided from cycle_indices.shape[0], a
+        # static Python int that costs nothing to check (unlike jnp.unique, which is itself
+        # expensive to trace/compile and was found to add ~1-3s of its own compile overhead):
+        #  - few evaluation points (e.g. n_eval=2 -> just cycle 0 and max_cycle, regardless of how
+        #    large max_cycle is): call jnp.linalg.matrix_power once per point directly (no
+        #    deduplication needed, since the call count is already bounded by n_eval). Each call
+        #    does its own O(log exponent) repeated squaring internally, and only a handful of GPU
+        #    dispatches happen in total -- far cheaper than building an ~unused 1..max_cycle table.
+        #  - many evaluation points (e.g. n_eval=251, densely sampling up to max_cycle): building
+        #    the whole table via a single associative_scan (one dispatch, O(max_cycle) work, same
+        #    cumulative-matmul idiom as step_solver_parallel_jax above) beats paying per-call
+        #    dispatch overhead for every one of the many individually-needed exponents.
+        if cycle_indices.shape[0] <= SPARSE_CYCLE_THRESHOLD:
+            powers_per_point = jnp.stack(
+                [jnp.linalg.matrix_power(U_single_sine, int(cycle_indices[i])) for i in range(cycle_indices.shape[0])],
+                axis=0,
+            )
+            U_single_sine_powers = jnp.moveaxis(powers_per_point, 0, 1)
+        else:
+            max_cycle = int(jnp.max(cycle_indices))
+            identity = jnp.broadcast_to(
+                jnp.eye(U_single_sine.shape[-1], dtype=U_single_sine.dtype),
+                (1,) + U_single_sine.shape,
+            )
+            repeated_U = jnp.broadcast_to(U_single_sine, (max_cycle,) + U_single_sine.shape)
+
+            def reverse_mul(A, B):
+                return jnp.matmul(B, A)
+
+            cumulative_powers = associative_scan(reverse_mul, repeated_U, axis=0)
+            powers_by_exponent = jnp.concatenate([identity, cumulative_powers], axis=0)
+            U_single_sine_powers = jnp.moveaxis(powers_by_exponent[cycle_indices], 0, 1)
+    else:
+        U_single_sine_powers = unp_inner.stack(
+            [unp_inner.linalg.matrix_power(U_single_sine, int(i)) for i in cycle_indices],
+            axis=1,
+        )
 
     solution = unp_inner.einsum('stij,stjk,skl->stil', solution_projected, U_single_sine_powers, y0s_array)
     solver_result = SolverResult(time_segment.simulation.t_eval,

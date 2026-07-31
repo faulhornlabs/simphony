@@ -27,6 +27,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import weakref
+import jax
 import jax.numpy as jnp
 
 import matplotlib.pyplot as plt
@@ -375,10 +376,11 @@ class BaseSpin(ModelComponent):
 
     @property
     def quantization_axis(self) -> Union[str, Components1D]:
-        """Quantization axis of the spin, given by the keyword ``'global_z'``, ``'local_static_field'``,
-        or ``'anisotropy_axis'``, or by an explicit vector in the global coordinate system. It
-        determines which direction is treated as the spin's local z-axis when building operators
-        and states for that spin."""
+        """Quantization axis of the spin.
+
+        Given by the keyword ``'global_z'``, ``'local_static_field'``, or ``'anisotropy_axis'``, or by
+        an explicit vector in the global coordinate system. It determines which direction is treated
+        as the spin's local z-axis when building operators and states for that spin."""
         return self._quantization_axis
 
     @quantization_axis.setter
@@ -787,6 +789,19 @@ class BaseDrivingField(ModelComponent):
 
     _component_change_kind = 'driving_field_changed'
 
+    name: str
+    """Name of the driving field."""
+
+    last_pulse_end: float = 0.
+    """End time of the latest pulse on this field (in :math:`\\mu\\text{s}`).
+
+    Starts at 0 and moves forward as pulses and waits are added. Each driving field tracks its own
+    ``last_pulse_end``; the model-wide :attr:`Model.last_pulse_end` is the maximum over all driving
+    fields."""
+
+    pulses: PulseList
+    """Ordered list of pulses on this driving field."""
+
     def __init__(self,
                  name: str,
                  target_spins: Optional[Sequence[str]] = None):
@@ -815,13 +830,28 @@ class BaseDrivingField(ModelComponent):
         self._notify_models()
 
     def remove_all_pulses(self):
-        """Remove all previously added pulses from the driving field."""
+        """Remove all pulses from this driving field only.
+
+        Use :meth:`Model.remove_all_pulses` to clear every field at once (and reset virtual
+        z-phases).
+        """
         self.last_pulse_end = 0.
         self.pulses = PulseList()
 
     def add_pulse(self,
                   pulse):
-        """Add a pulse object to the driving field."""
+        """Add a pre-built :class:`Pulse` to this driving field.
+
+        The pulse carries its own absolute ``start`` and ``end`` times. If it ends later than the
+        field's current ``last_pulse_end``, that end time moves forward to match; a pulse that ends
+        earlier leaves it unchanged.
+
+        Args:
+            pulse: The pulse to add; must not already belong to a driving field.
+
+        Raises:
+            SimphonyError: If ``pulse`` is already attached to a driving field.
+        """
         if pulse.driving_field is None:
             pulse.driving_field = self
             self.pulses.append(pulse)
@@ -838,7 +868,39 @@ class BaseDrivingField(ModelComponent):
                             rise_time: float = 0,
                             fall_time: float = 0,
                             is_effective_amplitude: bool = False):
-        """Add a rectangular pulse."""
+        """Add a rectangular pulse to this driving field.
+
+        The pulse has a constant-amplitude flat top and optional raised-cosine rise/fall ramps.
+
+        Args:
+            amplitude: Flat-top amplitude of the pulse (in :math:`\\text{T}`).
+            frequency: Carrier frequency of the pulse (in :math:`\\text{MHz}`).
+            phase: Carrier phase (in radians).
+            duration: Total pulse duration including any ramps (in :math:`\\mu\\text{s}`).
+            start: Absolute start time of the pulse (in :math:`\\mu\\text{s}`). See the note below
+                for the three ways to set it; defaults to this field's current ``last_pulse_end``.
+            rise_time: Duration of the raised-cosine ramp up from zero (in :math:`\\mu\\text{s}`,
+                default 0).
+            fall_time: Duration of the raised-cosine ramp down to zero (in :math:`\\mu\\text{s}`,
+                default 0).
+            is_effective_amplitude: If ``True``, interpret ``amplitude`` as the effective
+                (rectangular-equivalent) amplitude and scale the flat top up so the pulse area
+                matches ``amplitude * duration`` despite the ramps.
+
+        Note:
+            ``start`` can be set three ways:
+
+            - ``None`` (default): append after the previous pulse on this field (this field's own
+              ``last_pulse_end``).
+            - a float: an explicit absolute time (in :math:`\\mu\\text{s}`).
+            - ``model.last_pulse_end``: the global end, i.e. after the latest pulse across all
+              driving fields -- use this to start a pulse on one field right after a sequence built
+              on another field.
+
+        Raises:
+            SimphonyError: If ``duration`` is not positive, a ramp time is negative, or
+                ``rise_time + fall_time`` exceeds ``duration``.
+        """
         if duration <= 0:
             raise SimphonyError('duration must be positive')
 
@@ -901,7 +963,33 @@ class BaseDrivingField(ModelComponent):
                            frequency: float,
                            dt: Union[float, List[float]],
                            start: Optional[float] = None):
-        """Add a piecewise-constant pulse."""
+        """Add a piecewise-constant pulse to this driving field.
+
+        The complex envelope is held constant on each segment, giving a GRAPE-style control pulse.
+
+        Args:
+            samples: Complex envelope value on each segment (in :math:`\\text{T}`); ``samples[k]``
+                sets the amplitude and phase of segment ``k``.
+            frequency: Carrier frequency of the pulse (in :math:`\\text{MHz}`).
+            dt: Segment duration(s) (in :math:`\\mu\\text{s}`). A scalar uses the same step for every
+                segment; a list the same length as ``samples`` gives a per-segment duration.
+            start: Absolute start time of the pulse (in :math:`\\mu\\text{s}`). See the note below
+                for the three ways to set it; defaults to this field's current ``last_pulse_end``.
+
+        Note:
+            ``start`` can be set three ways:
+
+            - ``None`` (default): append after the previous pulse on this field (this field's own
+              ``last_pulse_end``).
+            - a float: an explicit absolute time (in :math:`\\mu\\text{s}`).
+            - ``model.last_pulse_end``: the global end, i.e. after the latest pulse across all
+              driving fields -- use this to start a pulse on one field right after a sequence built
+              on another field.
+
+        Raises:
+            SimphonyError: If any ``dt`` is not positive, or ``dt`` is a list whose length differs
+                from ``samples``.
+        """
         samples = unp_dynamic.asarray(samples, dtype=complex)
         len_samples = samples.shape[0]
 
@@ -934,7 +1022,17 @@ class BaseDrivingField(ModelComponent):
 
     def add_wait(self,
                  duration: float):
-        """Add an idle section to the driving field."""
+        """Add an idle section to this driving field.
+
+        Increases this field's ``last_pulse_end`` by ``duration``, leaving a gap before the next
+        pulse appended to this field. Other driving fields are not affected.
+
+        Args:
+            duration: Length of the idle section (in :math:`\\mu\\text{s}`).
+
+        Raises:
+            SimphonyError: If ``duration`` is not positive.
+        """
         if duration <= 0:
             raise SimphonyError('duration must be positive')
         self.last_pulse_end += duration
@@ -1033,6 +1131,18 @@ class LinearDrivingField(BaseDrivingField, Components1D):
         BaseDrivingField.__init__(self, name=name, target_spins=target_spins)
         self._attach_callback(self._notify_models)
 
+        self.vec: Union[List[float], np.array]
+        """Polarization direction of the field."""
+
+        self.x: float
+        """The :math:`x` component of the polarization direction."""
+
+        self.y: float
+        """The :math:`y` component of the polarization direction."""
+
+        self.z: float
+        """The :math:`z` component of the polarization direction."""
+
     def __repr__(self):
         base = f"{type(self).__name__}(name='{self.name}', direction={self.vec}"
         if self.target_spins is not None:
@@ -1076,8 +1186,19 @@ class CircularDrivingField(BaseDrivingField):
         BaseDrivingField.__init__(self, name=name, target_spins=target_spins)
 
         self.plane_normal = Components1D(plane_normal)
+        """Normal vector of the polarization plane."""
+
         self.phase_reference = Components1D(phase_reference)
+        """Reference direction defining the in-phase polarization axis.
+
+        Projected into the plane orthogonal to :attr:`plane_normal`."""
+
         self.phase_quadrature = Components1D()
+        """Quadrature polarization axis.
+
+        Computed internally as the cross product of :attr:`plane_normal` and
+        :attr:`phase_reference`."""
+
         self.plane_normal._attach_callback(self._on_geometry_changed)
         self.phase_reference._attach_callback(self._on_geometry_changed)
         self.phase_quadrature._attach_callback(self._on_geometry_changed)
@@ -1129,7 +1250,7 @@ class CircularDrivingField(BaseDrivingField):
         return [self.phase_reference.vec, self.phase_quadrature.vec]
 
     def _component_coefficients(self) -> List[complex]:
-        scale = 1.0 / np.sqrt(2.0)
+        scale = 0.5 # 1.0 / np.sqrt(2.0)
         return [scale, -1j * scale]
 
 
@@ -1153,7 +1274,10 @@ class Signal:
     def __init__(self, envelope: Union[complex, Callable[[float], complex], Callable[[uarray], uarray]] = 0.0,
                  frequency: float = 0.0):
         self.envelope = envelope
+        """Complex envelope :math:`A(t)`: a constant or a callable of time (in :math:`\\text{T}`)."""
+
         self.frequency = frequency
+        """Carrier frequency of the signal (in :math:`\\text{MHz}`)."""
 
     def __call__(self, ts: uarray) -> uarray:
         frequency = unp_dynamic.asarray(self.frequency)
@@ -1178,6 +1302,7 @@ class SignalSum:
 
     def __init__(self, signals: Optional[Sequence[Signal]] = None):
         self.signals: List[Signal] = list(signals) if signals is not None else []
+        """The individual :class:`Signal` terms that are summed."""
 
     def __call__(self, ts: uarray) -> uarray:
         if not self.signals:
@@ -1536,6 +1661,23 @@ def _calculate_division_points(pulse_list: PulseList,
     return division_points
 
 
+def _materialize_for_plotting(value, unp_inner):
+    """Convert `value` to a concrete array, recovering from a leaked-tracer conversion error.
+
+    A pulse's complex_envelope can hold a JAX tracer left over from an autodiff-transformed
+    function (e.g. jax.value_and_grad) that has already returned -- the trace itself is gone, but
+    the underlying concrete (forward-pass) value survives on the tracer's `.primal` attribute, so
+    plotting can recover it even though a plain array conversion raises.
+    """
+    try:
+        return unp_inner.asarray(value)
+    except jax.errors.JAXTypeError:
+        concrete = value
+        while hasattr(concrete, 'primal'):
+            concrete = concrete.primal
+        return unp_inner.asarray(concrete)
+
+
 class TimeSegment:
     """Represents a time segment associated with a list of pulses.
 
@@ -1566,7 +1708,10 @@ class TimeSegment:
         """End time of the segment."""
 
         self.plot: Optional[PlotSpec] = None
+        """Cached plotting data for this segment; ``None`` until prepared."""
+
         self.simulation: Optional[SimulationSpecBase] = None
+        """Cached discretized simulation data for this segment; ``None`` until prepared."""
 
     def __repr__(self):
         return (f'{type(self).__name__}('
@@ -1670,7 +1815,7 @@ class TimeSegment:
                     n_points = max_n_points
                 ts = unp_dynamic.linspace(self.start, self.end, n_points)
                 signal = self.signal()
-                ps = signal(ts)
+                ps = _materialize_for_plotting(signal(ts), unp_dynamic)
 
         elif function == 'complex_envelope':
             if self.n_pulses == 0:
@@ -1678,12 +1823,16 @@ class TimeSegment:
                 ps = [unp_dynamic.asarray([0., 0.])]
             elif self.is_all_constant_envelope:
                 ts = unp_dynamic.asarray([self.start, self.end])
-                ps = [unp_dynamic.asarray([pulse.complex_envelope for _ in ts]) for pulse in self]
+                ps = [unp_dynamic.asarray([_materialize_for_plotting(pulse.complex_envelope, unp_dynamic)] * len(ts))
+                     for pulse in self]
             else:
                 n_points = 251
                 ts = unp_dynamic.linspace(self.start, self.end, n_points)
                 ps = [unp_dynamic.asarray([
-                    pulse.complex_envelope if pulse.is_constant_envelope else pulse.complex_envelope(t) for t in ts
+                    _materialize_for_plotting(
+                        pulse.complex_envelope if pulse.is_constant_envelope else pulse.complex_envelope(t),
+                        unp_dynamic
+                    ) for t in ts
                 ]) for pulse in self]
 
         else:
